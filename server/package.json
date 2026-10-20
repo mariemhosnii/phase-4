@@ -1,0 +1,11 @@
+{
+  "name": "task-management-server",
+  "version": "1.0.0",
+  "description": "Backend API for the Task Management App (MERN)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "license": "ISC"
+}
