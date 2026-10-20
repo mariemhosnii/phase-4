@@ -101,6 +101,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .is-complete .task-copy h3 { color: #899089; text-decoration: line-through; }
 .task-meta { display: flex; align-items: center; gap: 12px; margin-top: 9px; }
 .priority, .task-meta time { color: #8a9189; font-size: 9px; }
+.task-status { padding: 3px 6px; border-radius: 2px; background: #e8ebe5; color: #667166; font-size: 9px; font-weight: 600; }
+.task-status-in-progress { background: #f4e5dc; color: #9a5a43; }
+.task-status-completed { background: #e1ebe3; color: #48624f; }
 .priority::before { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #a7b5a7; content: ""; }
 .priority-high::before { background: var(--coral); }
 .priority-low::before { background: #c2bd91; }

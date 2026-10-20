@@ -17,19 +17,14 @@ npm install --prefix server
 npm install --prefix client
 ```
 
-Copy `server/.env.example` to `server/.env` and set `MONGO_URI` and a long random `JWT_SECRET` before starting the API.
+Copy `server/.env.example` to `server/.env` and set `MONGO_URI` and a long random `JWT_SECRET`.
 
-Start the backend from the project root:
+Start the whole app from the project root:
 ```bash
-npm run dev
+npm start
 ```
 
-In a second terminal, start the client:
-```bash
-npm run client
-```
-
-The client expects the API at `http://localhost:5000/api`. Set `VITE_API_URL` in the client environment to change it.
+Open `http://localhost:5000` for the UI and API on the same origin. For frontend development with Vite hot reload, use `npm run client` in another terminal while the backend is running.
 
 ## API Endpoints
 | Method | Endpoint | Description |

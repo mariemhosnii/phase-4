@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = "/api";
 
 async function request(path, { token, ...options } = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -108,8 +108,11 @@ function TaskRow({ task, onToggle, onDelete }) {
         <h3>{task.title}</h3>
         {task.description && <p>{task.description}</p>}
         <div className="task-meta">
+          <span className={`task-status task-status-${task.status}`}>
+            {task.status === "in-progress" ? "In progress" : task.status === "completed" ? "Completed" : "To do"}
+          </span>
           <span className={`priority priority-${task.priority}`}>{task.priority || "medium"} priority</span>
-          {task.deadline && <time dateTime={task.deadline}>{new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>}
+          {task.deadline && <time dateTime={task.deadline}>Due {new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>}
         </div>
       </div>
       <button className="icon-button delete-button" type="button" aria-label={`Delete ${task.title}`} title="Delete task" onClick={() => onDelete(task._id)}>×</button>
