@@ -98,24 +98,96 @@ function AuthScreen({ onAuthenticated }) {
   );
 }
 
-function TaskRow({ task, onToggle, onDelete }) {
+function dateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+}
+
+function TaskRow({ task, onToggle, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [draft, setDraft] = useState({});
+
+  function beginEditing() {
+    setDraft({
+      title: task.title,
+      description: task.description || "",
+      deadline: dateInputValue(task.deadline),
+      priority: task.priority || "medium",
+      status: task.status || "todo",
+    });
+    setError("");
+    setEditing(true);
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(task._id, { ...draft, deadline: draft.deadline || null });
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <article className={`task-row ${task.status === "completed" ? "is-complete" : ""}`}>
-      <button className="task-check" type="button" aria-label={task.status === "completed" ? "Mark task incomplete" : "Mark task complete"} onClick={() => onToggle(task)}>
-        {task.status === "completed" && <span aria-hidden="true">✓</span>}
-      </button>
-      <div className="task-copy">
-        <h3>{task.title}</h3>
-        {task.description && <p>{task.description}</p>}
-        <div className="task-meta">
-          <span className={`task-status task-status-${task.status}`}>
-            {task.status === "in-progress" ? "In progress" : task.status === "completed" ? "Completed" : "To do"}
-          </span>
-          <span className={`priority priority-${task.priority}`}>{task.priority || "medium"} priority</span>
-          {task.deadline && <time dateTime={task.deadline}>Due {new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>}
-        </div>
-      </div>
-      <button className="icon-button delete-button" type="button" aria-label={`Delete ${task.title}`} title="Delete task" onClick={() => onDelete(task._id)}>×</button>
+      {editing ? (
+        <form className="task-edit-form" onSubmit={handleSave}>
+          <label className="sr-only" htmlFor={`edit-title-${task._id}`}>Task title</label>
+          <input id={`edit-title-${task._id}`} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required maxLength={160} />
+          <label className="sr-only" htmlFor={`edit-description-${task._id}`}>Description</label>
+          <textarea id={`edit-description-${task._id}`} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Add a note (optional)" rows="2" maxLength={1000} />
+          <div className="task-edit-fields">
+            <label>Status
+              <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}>
+                <option value="todo">To do</option><option value="in-progress">In progress</option><option value="completed">Completed</option>
+              </select>
+            </label>
+            <label>Priority
+              <select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value })}>
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+              </select>
+            </label>
+            <label>Deadline
+              <input type="date" value={draft.deadline} onChange={(event) => setDraft({ ...draft, deadline: event.target.value })} />
+            </label>
+          </div>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="task-edit-actions">
+            <button className="edit-save" type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</button>
+            <button className="edit-cancel" type="button" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <button className="task-check" type="button" aria-label={task.status === "completed" ? "Mark task incomplete" : "Mark task complete"} onClick={() => onToggle(task)}>
+            {task.status === "completed" && <span aria-hidden="true">✓</span>}
+          </button>
+          <div className="task-copy">
+            <h3>{task.title}</h3>
+            {task.description && <p>{task.description}</p>}
+            <div className="task-meta">
+              <span className={`task-status task-status-${task.status}`}>
+                {task.status === "in-progress" ? "In progress" : task.status === "completed" ? "Completed" : "To do"}
+              </span>
+              <span className={`priority priority-${task.priority}`}>{task.priority || "medium"} priority</span>
+              {task.deadline && <time dateTime={task.deadline}>Due {new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>}
+            </div>
+          </div>
+          <div className="task-actions">
+            <button className="edit-button" type="button" onClick={beginEditing}>Edit</button>
+            <button className="icon-button delete-button" type="button" aria-label={`Delete ${task.title}`} title="Delete task" onClick={() => onDelete(task._id)}>×</button>
+          </div>
+        </>
+      )}
     </article>
   );
 }
@@ -172,6 +244,15 @@ function TaskScreen({ token, user, onLogout }) {
     }
   }
 
+  async function saveTask(id, updates) {
+    const updated = await request(`/tasks/${id}`, {
+      token,
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+    setTasks((current) => current.map((task) => task._id === updated._id ? updated : task));
+  }
+
   async function deleteTask(id) {
     try {
       await request(`/tasks/${id}`, { token, method: "DELETE" });
@@ -220,7 +301,7 @@ function TaskScreen({ token, user, onLogout }) {
             <div className="empty-state"><span className="empty-mark" aria-hidden="true">✳</span><h3>A clear page.</h3><p>Add the first thing on your mind above.</p></div>
           ) : (
             <div className="task-list">
-              {tasks.map((task) => <TaskRow key={task._id} task={task} onToggle={toggleTask} onDelete={deleteTask} />)}
+              {tasks.map((task) => <TaskRow key={task._id} task={task} onToggle={toggleTask} onSave={saveTask} onDelete={deleteTask} />)}
             </div>
           )}
         </section>
