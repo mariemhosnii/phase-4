@@ -1,0 +1,257 @@
+import { useEffect, useState } from "react";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+async function request(path, { token, ...options } = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.message || "Something went wrong. Please try again.");
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function AuthScreen({ onAuthenticated }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const result = await request(`/auth/${mode}`, {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      onAuthenticated(result);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-layout">
+      <section className="auth-story" aria-label="Taskflow">
+        <div className="story-topline"><span className="brand-mark">T</span> TASKFLOW</div>
+        <div className="story-copy">
+          <p className="eyebrow">A little more room to think</p>
+          <h1>Make space<br />for what matters.</h1>
+          <p className="story-note">Your work, gathered in one calm place. Start with one next step.</p>
+        </div>
+        <div className="story-art" aria-hidden="true">
+          <div className="art-sun" />
+          <div className="art-sheet sheet-back"><i /><i /><i /></div>
+          <div className="art-sheet sheet-front"><span className="art-check">✓</span><i /><i /><i /></div>
+          <div className="art-stamp">ONE<br />THING<br />AT A TIME</div>
+        </div>
+        <p className="story-footer">A thoughtful place for your everyday list.</p>
+      </section>
+
+      <section className="auth-panel">
+        <div className="mobile-brand"><span className="brand-mark">T</span> TASKFLOW</div>
+        <div className="auth-content">
+          <p className="eyebrow">YOUR PERSONAL WORKSPACE</p>
+          <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
+          <p className="auth-subtitle">
+            {mode === "login" ? "Pick up where you left off." : "A clear head starts with a place to put things."}
+          </p>
+
+          <div className="auth-tabs" role="tablist" aria-label="Account access">
+            <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
+            <button type="button" role="tab" aria-selected={mode === "register"} className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Create account</button>
+          </div>
+
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label htmlFor="email">Email address</label>
+            <input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
+            <div className="password-label">
+              <label htmlFor="password">Password</label>
+              {mode === "register" && <span>8 characters minimum</span>}
+            </div>
+            <input id="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "register" ? 8 : undefined} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required />
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <button className="primary-button" type="submit" disabled={busy}>
+              {busy ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
+              <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+          <p className="auth-privacy">Your account keeps your task list private.</p>
+        </div>
+        <span className="panel-index">01 / 02</span>
+      </section>
+    </main>
+  );
+}
+
+function TaskRow({ task, onToggle, onDelete }) {
+  return (
+    <article className={`task-row ${task.status === "completed" ? "is-complete" : ""}`}>
+      <button className="task-check" type="button" aria-label={task.status === "completed" ? "Mark task incomplete" : "Mark task complete"} onClick={() => onToggle(task)}>
+        {task.status === "completed" && <span aria-hidden="true">✓</span>}
+      </button>
+      <div className="task-copy">
+        <h3>{task.title}</h3>
+        {task.description && <p>{task.description}</p>}
+        <div className="task-meta">
+          <span className={`priority priority-${task.priority}`}>{task.priority || "medium"} priority</span>
+          {task.deadline && <time dateTime={task.deadline}>{new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time>}
+        </div>
+      </div>
+      <button className="icon-button delete-button" type="button" aria-label={`Delete ${task.title}`} title="Delete task" onClick={() => onDelete(task._id)}>×</button>
+    </article>
+  );
+}
+
+function TaskScreen({ token, user, onLogout }) {
+  const [tasks, setTasks] = useState([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    request("/tasks", { token })
+      .then((result) => { if (active) setTasks(result); })
+      .catch((requestError) => {
+        if (!active) return;
+        setError(requestError.message);
+        if (requestError.status === 401) onLogout();
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token, onLogout]);
+
+  async function handleCreate(event) {
+    event.preventDefault();
+    setError("");
+    try {
+      const task = await request("/tasks", {
+        token,
+        method: "POST",
+        body: JSON.stringify({ title, description, priority, ...(deadline ? { deadline } : {}) }),
+      });
+      setTasks((current) => [task, ...current]);
+      setTitle("");
+      setDescription("");
+      setDeadline("");
+      setPriority("medium");
+    } catch (requestError) {
+      setError(requestError.message);
+      if (requestError.status === 401) onLogout();
+    }
+  }
+
+  async function toggleTask(task) {
+    const status = task.status === "completed" ? "todo" : "completed";
+    try {
+      const updated = await request(`/tasks/${task._id}`, { token, method: "PUT", body: JSON.stringify({ status }) });
+      setTasks((current) => current.map((item) => item._id === updated._id ? updated : item));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+
+  async function deleteTask(id) {
+    try {
+      await request(`/tasks/${id}`, { token, method: "DELETE" });
+      setTasks((current) => current.filter((task) => task._id !== id));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+
+  const remaining = tasks.filter((task) => task.status !== "completed").length;
+
+  return (
+    <main className="workspace">
+      <header className="workspace-header">
+        <a className="workspace-brand" href="/" aria-label="Taskflow home"><span className="brand-mark">T</span><span>TASKFLOW</span></a>
+        <div className="account-menu"><span className="account-email">{user.email}</span><button type="button" className="text-button" onClick={onLogout}>Log out <span aria-hidden="true">↗</span></button></div>
+      </header>
+
+      <div className="workspace-grid">
+        <section className="task-column">
+          <div className="section-heading">
+            <div><p className="eyebrow">YOUR PRIVATE SPACE</p><h1>Today, in focus.</h1></div>
+            <div className="task-count"><strong>{remaining.toString().padStart(2, "0")}</strong><span>to do</span></div>
+          </div>
+
+          <form className="task-composer" onSubmit={handleCreate}>
+            <label className="sr-only" htmlFor="new-task">Task title</label>
+            <input id="new-task" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What needs your attention?" required maxLength={160} />
+            <label className="sr-only" htmlFor="task-description">Description</label>
+            <textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add a note (optional)" rows="2" maxLength={1000} />
+            <div className="composer-footer">
+              <div className="composer-options">
+                <label className="sr-only" htmlFor="task-priority">Priority</label>
+                <select id="task-priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
+                  <option value="low">Low priority</option><option value="medium">Medium priority</option><option value="high">High priority</option>
+                </select>
+                <label className="deadline-control" htmlFor="task-deadline"><span aria-hidden="true">⌁</span><span className="sr-only">Deadline</span><input id="task-deadline" type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} /></label>
+              </div>
+              <button className="add-button" type="submit"><span aria-hidden="true">+</span> Add task</button>
+            </div>
+          </form>
+
+          <div className="list-heading"><h2>YOUR LIST</h2><span>{tasks.length} {tasks.length === 1 ? "task" : "tasks"}</span></div>
+          {error && <p className="workspace-error" role="alert">{error}</p>}
+          {loading ? <p className="list-message">Gathering your tasks...</p> : tasks.length === 0 ? (
+            <div className="empty-state"><span className="empty-mark" aria-hidden="true">✳</span><h3>A clear page.</h3><p>Add the first thing on your mind above.</p></div>
+          ) : (
+            <div className="task-list">
+              {tasks.map((task) => <TaskRow key={task._id} task={task} onToggle={toggleTask} onDelete={deleteTask} />)}
+            </div>
+          )}
+        </section>
+        <aside className="workspace-aside">
+          <div className="aside-date"><span className="aside-sun" aria-hidden="true">◒</span><span>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span></div>
+          <div className="aside-note"><p className="eyebrow">A SMALL REMINDER</p><p>Progress is just a few ordinary steps, taken one at a time.</p><span className="note-rule" /></div>
+          <div className="aside-bottom"><span>KEEP IT MOVING</span><span>TF — 01</span></div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+export default function App() {
+  const [token, setToken] = useState(() => sessionStorage.getItem("taskflow-token"));
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("taskflow-user") || "null"); }
+    catch { return null; }
+  });
+
+  function handleAuthenticated(result) {
+    sessionStorage.setItem("taskflow-token", result.token);
+    sessionStorage.setItem("taskflow-user", JSON.stringify(result.user));
+    setToken(result.token);
+    setUser(result.user);
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("taskflow-token");
+    sessionStorage.removeItem("taskflow-user");
+    setToken(null);
+    setUser(null);
+  }
+
+  if (!token || !user) return <AuthScreen onAuthenticated={handleAuthenticated} />;
+  return <TaskScreen token={token} user={user} onLogout={handleLogout} />;
+}
